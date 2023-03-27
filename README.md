@@ -4,6 +4,12 @@ Simple min-max algorithm that plays as black in the game othello.
 
 Using alpha-beta-pruning.
 
+
+### TODO
+Make GUI more complete. I.E. make starting screen, score, undo button and more.  
+Improve min-max algorithm to make it have bigger depth. 
+Improve board evaluation.
+
 ### Benchmark
 
 Beat the ai at https://mindsports.nl/index.php/dagaz/867-othello-ai 2/2 times.
