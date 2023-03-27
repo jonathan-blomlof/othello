@@ -2,6 +2,8 @@
 
 Simple min-max algorithm that plays as black in the game othello.
 
+Using alpha-beta-pruning.
+
 ### Benchmark
 
 Beat the ai at https://mindsports.nl/index.php/dagaz/867-othello-ai 2/2 times.
