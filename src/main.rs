@@ -53,6 +53,7 @@ fn main() {
     let mut mouse_x = 0;
     let mut mouse_y = 0;
     let mut dist_per_block = 0.0;
+    let mut do_ai_move = false;
     let mut window: PistonWindow = WindowSettings::new("Othello", [WINDOW_SIZE, WINDOW_SIZE])
         .build()
         .unwrap();
@@ -67,6 +68,7 @@ fn main() {
             {
                 if game.white_turn {
                     do_move(mouse_x, mouse_y, &mut game);
+                    do_ai_move = false;
                 }
             }
         } else if let Some(m) = event.mouse_cursor_args() {
@@ -79,10 +81,12 @@ fn main() {
                 undo(&mut game);
             }
         }
-
-        if !game.white_turn && !game.game_over {
+        if do_ai_move && !game.white_turn && !game.game_over {
             let best = get_best_move(&game).unwrap();
             do_move(best.x, best.y, &mut game);
+        }
+        if let Some(_) = event.render_args() {
+            do_ai_move = true;
         }
 
         //draw commands
@@ -158,6 +162,7 @@ fn main() {
                 }
             }
         });
+
     }
 }
 
