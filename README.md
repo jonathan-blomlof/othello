@@ -6,16 +6,11 @@ Using alpha-beta-pruning.
 
 
 ### TODO
-Make GUI more complete. I.E. make starting screen, score, undo button and more.  
-Improve min-max algorithm to make it have bigger depth. 
-Improve board evaluation.
+Make GUI more complete. I.E. make starting screen, score and more.  
+Improve min-max algorithm by storing calculations in a tree, to make it have bigger depth. 
+Adjust board evaluation.
 
 ### Benchmark
 
 Beat the ai at https://mindsports.nl/index.php/dagaz/867-othello-ai 2/2 times.
-
-### Bugs
-Some bugs were discovered during benchmarks. Theese should be fixed but have not been tested yet.
-* Stack-overflow. The min-max did overflow because neither had any moves. (The `move_found` for both max and min was false).
-  * Solved by setting `depth`-arg as minimium of (`DEPTH`, `BOARD_SIZE*BOARD_SIZE - amount_of_stones`)
-* When white places last move black tried to do a move, which it couldn't. That caused a run-time error. Fixed by adding checks for `game.game_over`.
+Beat the ai at https://www.eothello.com 1/1 times.
