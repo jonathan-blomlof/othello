@@ -1,11 +1,14 @@
 use piston_window::*;
 mod minmax;
-use minmax::get_best_move;
+use minmax::get_for_whoever_best_move;
 
 const BOARD_SIZE: usize = 8;
-const WHITE_IS_STARTING: bool = false;
+const WHITE_IS_STARTING: bool = true;
+const AI_COLOUR: Colour = Colour::WHITE;
+const DEPTH: usize = 5;
 const STARING_STONE: usize = 4;
 const WINDOW_SIZE: u32 = 500;
+
 #[derive(Clone, Copy)]
 enum Colour {
     WHITE,
@@ -13,7 +16,7 @@ enum Colour {
     EMPTY,
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Square {
     x: usize,
     y: usize,
@@ -26,6 +29,8 @@ pub struct Game {
     possible_moves: Vec<Vec<Vec<Square>>>,
 
     prev_boards: Vec<([[Colour; BOARD_SIZE]; BOARD_SIZE], bool)>,
+    last_placed: Square,
+    flipped_tiles_from_move: Vec<Square>,
 
     amount_of_stone: usize,
     game_over: bool,
@@ -39,6 +44,8 @@ fn init_game() -> Game {
         white_turn: WHITE_IS_STARTING,
         possible_moves: vec![],
         prev_boards: Vec::with_capacity(BOARD_SIZE * BOARD_SIZE),
+        last_placed: Square { x: 0, y: 0 },
+        flipped_tiles_from_move: Vec::new(),
         amount_of_stone: STARING_STONE,
         game_over: false,
         winner: Colour::EMPTY, //empty indicates draw. Value only use-able if game_over == true
@@ -53,10 +60,13 @@ fn main() {
     let mut mouse_x = 0;
     let mut mouse_y = 0;
     let mut dist_per_block = 0.0;
+
     let mut do_ai_move = false;
     let mut window: PistonWindow = WindowSettings::new("Othello", [WINDOW_SIZE, WINDOW_SIZE])
         .build()
         .unwrap();
+
+    /* GAME LOOP */
     while let Some(event) = window.next() {
         if let Some(Button::Mouse(MouseButton::Left)) = event.press_args() {
             // we pressed a button.
@@ -75,12 +85,13 @@ fn main() {
             dist_per_block = window.size().height.min(window.size().width) / BOARD_SIZE as f64;
             mouse_x = (m[0] / dist_per_block) as usize;
             mouse_y = (m[1] / dist_per_block) as usize;
-        }
-        if let Some(Button::Keyboard(key)) = event.press_args() {
+        } else if let Some(Button::Keyboard(key)) = event.press_args() {
             if key == Key::U {
                 undo(&mut game);
+                wait_before_ai_move = true;
             }
         }
+
         if do_ai_move && !game.white_turn && !game.game_over {
             let best = get_best_move(&game).unwrap();
             do_move(best.x, best.y, &mut game);
@@ -89,9 +100,42 @@ fn main() {
             do_ai_move = true;
         }
 
-        //draw commands
+        /* DRAWING */
+
         window.draw_2d(&event, |context, graphics, _device| {
             clear([0.5, 0.5, 0.5, 1.0], graphics);
+
+            // shading newly flipped and placed stones
+            // only if we have stored a prev board
+            if game.prev_boards.len() > 0 {
+                let new_placed_colour = [0.0, 0.0, 0.8, 1.0];
+                let new_flipped_colour = [0.5, 0.5, 1.0, 1.0];
+                let (x, y) = (game.last_placed.x, game.last_placed.y);
+                rectangle(
+                    new_placed_colour,
+                    [
+                        dist_per_block * x as f64,
+                        dist_per_block * y as f64,
+                        dist_per_block,
+                        dist_per_block,
+                    ],
+                    context.transform,
+                    graphics,
+                );
+                for sq in game.flipped_tiles_from_move.iter() {
+                    rectangle(
+                        new_flipped_colour,
+                        [
+                            dist_per_block * sq.x as f64,
+                            dist_per_block * sq.y as f64,
+                            dist_per_block,
+                            dist_per_block,
+                        ],
+                        context.transform,
+                        graphics,
+                    );
+                }
+            }
 
             let black = [0.0, 0.0, 0.0, 1.0];
 
@@ -142,22 +186,24 @@ fn main() {
                     }
                 }
             }
-            let green = [0.0, 0.5, 0.0, 1.0];
-            for (x, outer_vec) in game.possible_moves.iter().enumerate() {
-                for (y, inner_vec) in outer_vec.iter().enumerate() {
-                    if inner_vec.len() > 0 {
-                        //this is a valid move
-                        ellipse(
-                            green,
-                            [
-                                (x as f64 + 0.4) * dist_per_block,
-                                (y as f64 + 0.4) * dist_per_block,
-                                dist_per_block * 0.2,
-                                dist_per_block * 0.2,
-                            ],
-                            context.transform,
-                            graphics,
-                        )
+            if player_turn(game.white_turn) {
+                let green = [0.0, 0.5, 0.0, 1.0];
+                for (x, outer_vec) in game.possible_moves.iter().enumerate() {
+                    for (y, inner_vec) in outer_vec.iter().enumerate() {
+                        if inner_vec.len() > 0 {
+                            //this is a valid move
+                            ellipse(
+                                green,
+                                [
+                                    (x as f64 + 0.4) * dist_per_block,
+                                    (y as f64 + 0.4) * dist_per_block,
+                                    dist_per_block * 0.2,
+                                    dist_per_block * 0.2,
+                                ],
+                                context.transform,
+                                graphics,
+                            )
+                        }
                     }
                 }
             }
@@ -201,15 +247,26 @@ fn get_winner(board: &[[Colour; BOARD_SIZE]; BOARD_SIZE]) -> Colour {
     }
 }
 
+fn player_turn(white_turn: bool) -> bool {
+    match AI_COLOUR {
+        Colour::EMPTY => return true,       // No one is AI
+        Colour::WHITE => return !white_turn,// AI is white
+        Colour::BLACK => return white_turn, // AI is black
+    }
+}
+
 fn set_up_board() -> [[Colour; BOARD_SIZE]; BOARD_SIZE] {
     let mut board = [[Colour::EMPTY; BOARD_SIZE]; BOARD_SIZE];
     board[BOARD_SIZE / 2 - 1][BOARD_SIZE / 2 - 1] = Colour::BLACK;
     board[BOARD_SIZE / 2][BOARD_SIZE / 2 - 1] = Colour::WHITE;
     board[BOARD_SIZE / 2 - 1][BOARD_SIZE / 2] = Colour::WHITE;
     board[BOARD_SIZE / 2][BOARD_SIZE / 2] = Colour::BLACK;
-
-    //let mut _in = std::io::stdin().lock();
     return board;
+}
+
+fn do_move_and_print_info(x: usize, y: usize, game: &mut Game) {
+    do_move(x, y, game);
+    print_game_information(game);
 }
 
 fn do_move(x: usize, y: usize, game: &mut Game) {
@@ -219,6 +276,9 @@ fn do_move(x: usize, y: usize, game: &mut Game) {
     } else {
         Colour::BLACK
     };
+
+    game.last_placed = Square { x: x, y: y };
+    game.flipped_tiles_from_move = game.possible_moves[x][y].clone();
     for sq in game.possible_moves[x][y].iter() {
         game.board[sq.x][sq.y] = colour
     }
@@ -242,6 +302,28 @@ fn do_move(x: usize, y: usize, game: &mut Game) {
             game.game_over = true;
             game.winner = get_winner(&game.board);
         }
+    }
+}
+
+fn print_game_information(game: &Game) {
+    if game.game_over {
+        match game.winner {
+            Colour::BLACK => {
+                println!("Game is over. The winner is black.");
+            }
+            Colour::WHITE => {
+                println!("Game is over. White won.");
+            }
+            Colour::EMPTY => {
+                println!("Game is over. It's a draw, a rare occurance.");
+            }
+        }
+    } else {
+        println!(
+            "Current game state:\n\tCurrent player to do a move: {}\n\tAmount of stones on table: {}",
+            if game.white_turn { "White" } else { "Black" },
+            game.amount_of_stone
+        );
     }
 }
 
