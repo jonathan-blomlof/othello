@@ -61,7 +61,6 @@ fn main() {
     let mut mouse_y = 0;
     let mut dist_per_block = 0.0;
     let mut wait_before_ai_move = true;
-
     let mut window: PistonWindow = WindowSettings::new("Othello", [WINDOW_SIZE, WINDOW_SIZE])
         .build()
         .unwrap();
