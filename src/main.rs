@@ -60,8 +60,7 @@ fn main() {
     let mut mouse_x = 0;
     let mut mouse_y = 0;
     let mut dist_per_block = 0.0;
-
-    let mut do_ai_move = false;
+    let mut wait_before_ai_move = true;
     let mut window: PistonWindow = WindowSettings::new("Othello", [WINDOW_SIZE, WINDOW_SIZE])
         .build()
         .unwrap();
@@ -76,9 +75,9 @@ fn main() {
                 && game.possible_moves[mouse_x][mouse_y].len() > 0
                 && !game.game_over
             {
-                if game.white_turn {
-                    do_move(mouse_x, mouse_y, &mut game);
-                    do_ai_move = false;
+                if player_turn(game.white_turn) {
+                    do_move_and_print_info(mouse_x, mouse_y, &mut game);
+                    wait_before_ai_move = true;
                 }
             }
         } else if let Some(m) = event.mouse_cursor_args() {
@@ -91,13 +90,13 @@ fn main() {
                 wait_before_ai_move = true;
             }
         }
-
-        if do_ai_move && !game.white_turn && !game.game_over {
-            let best = get_best_move(&game).unwrap();
-            do_move(best.x, best.y, &mut game);
+        if !wait_before_ai_move && !player_turn(game.white_turn) && !game.game_over {
+            let best = get_for_whoever_best_move(&game).unwrap();
+            do_move_and_print_info(best.x, best.y, &mut game);
         }
         if let Some(_) = event.render_args() {
-            do_ai_move = true;
+            // we have rendered the updated board, let the computer calculate move (and freeze the screen).
+            wait_before_ai_move = false;
         }
 
         /* DRAWING */
@@ -208,7 +207,6 @@ fn main() {
                 }
             }
         });
-
     }
 }
 
