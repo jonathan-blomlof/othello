@@ -4,7 +4,7 @@ use minmax::get_for_whoever_best_move;
 
 const BOARD_SIZE: usize = 8;
 const WHITE_IS_STARTING: bool = true;
-const AI_COLOUR: Colour = Colour::WHITE;
+const AI_COLOUR: Colour = Colour::BLACK;
 const DEPTH: usize = 5;
 const STARING_STONE: usize = 4;
 const WINDOW_SIZE: u32 = 500;
@@ -24,14 +24,18 @@ pub struct Square {
 
 #[derive(Clone)]
 pub struct Game {
-    board: [[Colour; BOARD_SIZE]; BOARD_SIZE],
-    white_turn: bool,
-    possible_moves: Vec<Vec<Vec<Square>>>,
+    board_essential: BoardEssentials,
 
     prev_boards: Vec<([[Colour; BOARD_SIZE]; BOARD_SIZE], bool)>,
     last_placed: Square,
     flipped_tiles_from_move: Vec<Square>,
+}
 
+#[derive(Clone)]
+pub struct BoardEssentials {
+    board: [[Colour; BOARD_SIZE]; BOARD_SIZE],
+    white_turn: bool,
+    possible_moves: Vec<Vec<Vec<Square>>>,
     amount_of_stone: usize,
     game_over: bool,
     winner: Colour,
@@ -39,19 +43,23 @@ pub struct Game {
 
 fn init_game() -> Game {
     let board = set_up_board();
-    let mut game = Game {
+    let board_ess = BoardEssentials {
         board: board,
         white_turn: WHITE_IS_STARTING,
         possible_moves: vec![],
-        prev_boards: Vec::with_capacity(BOARD_SIZE * BOARD_SIZE),
-        last_placed: Square { x: 0, y: 0 },
-        flipped_tiles_from_move: Vec::new(),
         amount_of_stone: STARING_STONE,
         game_over: false,
         winner: Colour::EMPTY, //empty indicates draw. Value only use-able if game_over == true
     };
-    game.possible_moves = get_all_possible_moves(&game).0;
-    game
+    let mut game = Game {
+        board_essential: board_ess,
+        prev_boards: Vec::with_capacity(BOARD_SIZE * BOARD_SIZE),
+        last_placed: Square { x: 0, y: 0 },
+        flipped_tiles_from_move: Vec::new(),
+
+    };
+    game.board_essential.possible_moves = get_all_possible_moves(&game.board_essential).0;
+    return game
 }
 
 fn main() {
@@ -72,10 +80,10 @@ fn main() {
 
             if mouse_x < BOARD_SIZE
                 && mouse_y < BOARD_SIZE
-                && game.possible_moves[mouse_x][mouse_y].len() > 0
-                && !game.game_over
+                && game.board_essential.possible_moves[mouse_x][mouse_y].len() > 0
+                && !game.board_essential.game_over
             {
-                if player_turn(game.white_turn) {
+                if player_turn(game.board_essential.white_turn) {
                     do_move_and_print_info(mouse_x, mouse_y, &mut game);
                     wait_before_ai_move = true;
                 }
@@ -90,8 +98,8 @@ fn main() {
                 wait_before_ai_move = true;
             }
         }
-        if !wait_before_ai_move && !player_turn(game.white_turn) && !game.game_over {
-            let best = get_for_whoever_best_move(&game).unwrap();
+        if !wait_before_ai_move && !player_turn(game.board_essential.white_turn) && !game.board_essential.game_over {
+            let best = get_for_whoever_best_move(&game.board_essential).unwrap();
             do_move_and_print_info(best.x, best.y, &mut game);
         }
         if let Some(_) = event.render_args() {
@@ -156,7 +164,7 @@ fn main() {
                 );
             }
             let white = [1.0; 4];
-            for (x, column) in game.board.iter().enumerate() {
+            for (x, column) in game.board_essential.board.iter().enumerate() {
                 for (y, colour) in column.iter().enumerate() {
                     match colour {
                         Colour::BLACK => ellipse(
@@ -185,9 +193,9 @@ fn main() {
                     }
                 }
             }
-            if player_turn(game.white_turn) {
+            if player_turn(game.board_essential.white_turn) {
                 let green = [0.0, 0.5, 0.0, 1.0];
-                for (x, outer_vec) in game.possible_moves.iter().enumerate() {
+                for (x, outer_vec) in game.board_essential.possible_moves.iter().enumerate() {
                     for (y, inner_vec) in outer_vec.iter().enumerate() {
                         if inner_vec.len() > 0 {
                             //this is a valid move
@@ -213,11 +221,11 @@ fn main() {
 fn undo(game: &mut Game) {
     match game.prev_boards.pop() {
         Some(old_board) => {
-            game.board = old_board.0;
-            game.white_turn = old_board.1;
-            game.possible_moves = get_all_possible_moves(game).0;
-            game.amount_of_stone -= 1;
-            game.game_over = false;
+            game.board_essential.board = old_board.0;
+            game.board_essential.white_turn = old_board.1;
+            game.board_essential.possible_moves = get_all_possible_moves(&game.board_essential).0;
+            game.board_essential.amount_of_stone -= 1;
+            game.board_essential.game_over = false;
         }
         None => (),
     }
@@ -268,44 +276,49 @@ fn do_move_and_print_info(x: usize, y: usize, game: &mut Game) {
 }
 
 fn do_move(x: usize, y: usize, game: &mut Game) {
-    game.prev_boards.push((game.board.clone(), game.white_turn));
-    let colour = if game.white_turn {
+    game.prev_boards.push((game.board_essential.board.clone(), game.board_essential.white_turn));
+    game.last_placed = Square { x: x, y: y };
+    game.flipped_tiles_from_move = game.board_essential.possible_moves[x][y].clone();
+    
+    do_move_essentials(x, y, &mut game.board_essential)
+}
+
+fn do_move_essentials(x: usize, y: usize, board_essential: &mut BoardEssentials) {
+    let colour = if board_essential.white_turn {
         Colour::WHITE
     } else {
         Colour::BLACK
     };
 
-    game.last_placed = Square { x: x, y: y };
-    game.flipped_tiles_from_move = game.possible_moves[x][y].clone();
-    for sq in game.possible_moves[x][y].iter() {
-        game.board[sq.x][sq.y] = colour
+    for sq in board_essential.possible_moves[x][y].iter() {
+        board_essential.board[sq.x][sq.y] = colour
     }
-    game.board[x][y] = colour;
+    board_essential.board[x][y] = colour;
 
-    game.white_turn = !game.white_turn;
-    let temp = get_all_possible_moves(&game);
-    game.possible_moves = temp.0;
+    board_essential.white_turn = !board_essential.white_turn;
+    let temp = get_all_possible_moves(&board_essential);
+    board_essential.possible_moves = temp.0;
     let a_move_exists = temp.1;
-    game.amount_of_stone += 1;
+    board_essential.amount_of_stone += 1;
 
-    if game.amount_of_stone == BOARD_SIZE * BOARD_SIZE {
-        game.game_over = true;
-        game.winner = get_winner(&game.board);
+    if board_essential.amount_of_stone == BOARD_SIZE * BOARD_SIZE {
+        board_essential.game_over = true;
+        board_essential.winner = get_winner(&board_essential.board);
     } else if !a_move_exists {
-        game.white_turn = !game.white_turn;
-        let temp = get_all_possible_moves(&game);
-        game.possible_moves = temp.0;
+        board_essential.white_turn = !board_essential.white_turn;
+        let temp = get_all_possible_moves(&board_essential);
+        board_essential.possible_moves = temp.0;
         let a_move_exists = temp.1;
         if !a_move_exists {
-            game.game_over = true;
-            game.winner = get_winner(&game.board);
+            board_essential.game_over = true;
+            board_essential.winner = get_winner(&board_essential.board);
         }
     }
 }
 
 fn print_game_information(game: &Game) {
-    if game.game_over {
-        match game.winner {
+    if game.board_essential.game_over {
+        match game.board_essential.winner {
             Colour::BLACK => {
                 println!("Game is over. The winner is black.");
             }
@@ -319,56 +332,29 @@ fn print_game_information(game: &Game) {
     } else {
         println!(
             "Current game state:\n\tCurrent player to do a move: {}\n\tAmount of stones on table: {}",
-            if game.white_turn { "White" } else { "Black" },
-            game.amount_of_stone
+            if game.board_essential.white_turn { "White" } else { "Black" },
+            game.board_essential.amount_of_stone
         );
     }
 }
 
-/*fn print_board(board: &[[Colour; BOARD_SIZE]; BOARD_SIZE], possible_moves: &Vec<Vec<Vec<Square>>>) {
-    let mut _str = String::new();
-    _str += "----------------\n";
-    for y in 0..BOARD_SIZE {
-        _str += "|";
-        for x in 0..BOARD_SIZE {
-            _str += match board[x][y] {
-                Colour::WHITE => "w,",
-                Colour::BLACK => "b,",
-                Colour::EMPTY => {
-                    if possible_moves[x][y].len() > 0 {
-                        "x,"
-                    } else {
-                        "e,"
-                    }
-                }
-            }
-        }
-        _str.pop();
-        _str += "|\n"
-    }
-    _str += "----------------\n";
-    print!("{}", _str);
-}*/
-
-fn get_all_possible_moves(game: &Game) -> (Vec<Vec<Vec<Square>>>, bool) {
-    // The reuslt will be hashed based on square
-    // e.g sqaure (x,y) has index [y*BOARD_SIZE + x]
+fn get_all_possible_moves(board_essential: &BoardEssentials) -> (Vec<Vec<Vec<Square>>>, bool) {
     let mut result: Vec<Vec<Vec<Square>>> = Vec::with_capacity(BOARD_SIZE);
     let mut a_move_exists = false;
     let mut _temp = Vec::with_capacity(BOARD_SIZE);
     _temp.resize(BOARD_SIZE, vec![]);
     result.resize(BOARD_SIZE, _temp);
 
-    for (x, row) in game.board.iter().enumerate() {
+    for (x, row) in board_essential.board.iter().enumerate() {
         for (y, square) in row.iter().enumerate() {
-            match (square, game.white_turn) {
+            match (square, board_essential.white_turn) {
                 (Colour::BLACK, false) => {
-                    if insert_square_possible_moves(&game, x, y, &mut result) {
+                    if insert_square_possible_moves(&board_essential, x, y, &mut result) {
                         a_move_exists = true;
                     }
                 }
                 (Colour::WHITE, true) => {
-                    if insert_square_possible_moves(&game, x, y, &mut result) {
+                    if insert_square_possible_moves(&board_essential, x, y, &mut result) {
                         a_move_exists = true;
                     }
                 }
@@ -380,7 +366,7 @@ fn get_all_possible_moves(game: &Game) -> (Vec<Vec<Vec<Square>>>, bool) {
 }
 
 fn insert_square_possible_moves(
-    game: &Game,
+    board_essential: &BoardEssentials,
     x: usize,
     y: usize,
     dump: &mut Vec<Vec<Vec<Square>>>,
@@ -393,7 +379,7 @@ fn insert_square_possible_moves(
     let mut passed = false;
 
     for i in 1..(min + 1) {
-        match (game.board[x - i][y - i], game.white_turn) {
+        match (board_essential.board[x - i][y - i], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x - i][y - i].append(&mut squares_passed);
@@ -423,7 +409,7 @@ fn insert_square_possible_moves(
     squares_passed = vec![];
     passed = false;
     for i in 1..(x + 1) {
-        match (game.board[x - i][y], game.white_turn) {
+        match (board_essential.board[x - i][y], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x - i][y].append(&mut squares_passed);
@@ -448,7 +434,7 @@ fn insert_square_possible_moves(
     squares_passed = vec![];
     passed = false;
     for i in 1..(min + 1) {
-        match (game.board[x - i][y + i], game.white_turn) {
+        match (board_essential.board[x - i][y + i], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x - i][y + i].append(&mut squares_passed);
@@ -478,7 +464,7 @@ fn insert_square_possible_moves(
     squares_passed = vec![];
     passed = false;
     for i in 1..(7 - y + 1) {
-        match (game.board[x][y + i], game.white_turn) {
+        match (board_essential.board[x][y + i], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x][y + i].append(&mut squares_passed);
@@ -503,7 +489,7 @@ fn insert_square_possible_moves(
     passed = false;
     min = (7 - x).min(7 - y);
     for i in 1..(min + 1) {
-        match (game.board[x + i][y + i], game.white_turn) {
+        match (board_essential.board[x + i][y + i], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x + i][y + i].append(&mut squares_passed);
@@ -533,7 +519,7 @@ fn insert_square_possible_moves(
     squares_passed = vec![];
     passed = false;
     for i in 1..(7 - x + 1) {
-        match (game.board[x + i][y], game.white_turn) {
+        match (board_essential.board[x + i][y], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x + i][y].append(&mut squares_passed);
@@ -558,7 +544,7 @@ fn insert_square_possible_moves(
     squares_passed = vec![];
     passed = false;
     for i in 1..(min + 1) {
-        match (game.board[x + i][y - i], game.white_turn) {
+        match (board_essential.board[x + i][y - i], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x + i][y - i].append(&mut squares_passed);
@@ -588,7 +574,7 @@ fn insert_square_possible_moves(
     squares_passed = vec![];
     passed = false;
     for i in 1..(y + 1) {
-        match (game.board[x][y - i], game.white_turn) {
+        match (board_essential.board[x][y - i], board_essential.white_turn) {
             (Colour::EMPTY, _) => {
                 if passed {
                     dump[x][y - i].append(&mut squares_passed);
